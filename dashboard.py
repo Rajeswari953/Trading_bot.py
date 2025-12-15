@@ -1,5 +1,5 @@
 # dashboard.py
-# Forex Trading Dashboard (Streamlit Cloud Compatible)
+# Forex Trading Dashboard (Safe for Streamlit Cloud)
 
 import streamlit as st
 import pandas as pd
@@ -11,22 +11,28 @@ st.set_page_config(page_title="Forex Trading Dashboard", layout="wide")
 st.title("📊 Forex Trading Dashboard")
 st.write("Forex analysis with future trend prediction (no heavy ML)")
 
-# Load data
+# ---------------------------
+# LOAD DATA
+# ---------------------------
 df = pd.read_csv("forex_data.csv")
 
-# Date handling
+# ---------------------------
+# SAFE DATE HANDLING
+# ---------------------------
 if 'Date' in df.columns:
-    df['Date'] = pd.to_datetime(df['Date'])
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    # Fill any invalid dates
+    df['Date'].fillna(pd.date_range(start='2023-01-01', periods=len(df)), inplace=True)
 else:
-    df['Date'] = pd.date_range(start="2023-01-01", periods=len(df), freq="D")
-
-st.subheader("Data Preview")
-st.dataframe(df.head())
+    # If no Date column, generate safe date range
+    max_rows = 5000  # limit to 5000 rows to avoid overflow
+    df = df.head(max_rows)
+    df['Date'] = pd.date_range(start='2023-01-01', periods=len(df), freq='D')
 
 # ---------------------------
-# FUTURE PREDICTION (SAFE)
+# FUTURE PREDICTION (MOVING AVERAGE)
 # ---------------------------
-window = 5
+window = 5  # last 5 rows average
 df['Prediction'] = df['BC'].rolling(window=window).mean()
 
 # ---------------------------
@@ -46,8 +52,8 @@ col3.metric("Predicted Avg", round(df['Prediction'].iloc[-1], 2))
 # ---------------------------
 fig = px.line(
     df,
-    x="Date",
-    y=["BC", "Prediction"],
+    x='Date',
+    y=['BC', 'Prediction'],
     title="BC Price vs Future Prediction"
 )
 st.plotly_chart(fig, use_container_width=True)
