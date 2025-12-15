@@ -1,64 +1,71 @@
 # dashboard.py
+# Forex Trading Dashboard (Streamlit Cloud Compatible)
+
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
-import matplotlib.pyplot as plt
+import plotly.express as px
 
-st.title("Forex Trading Bot Dashboard")
-st.write("Predicting Forex prices using LSTM!")
+st.set_page_config(page_title="Forex Trading Dashboard", layout="wide")
 
-# Automatically load CSV from the folder
-df = pd.read_csv("forex_data.csv")  # make sure this file is in the same folder
-st.write("Data Preview:")
-st.dataframe(df.head())  # show first 5 rows
+st.title("📊 Forex Trading Dashboard")
+st.write("Forex analysis with future trend prediction (no heavy ML)")
 
-# Select columns
-features = df[['BO','BH','BL','BC','AO','AH','AL','AC']].values
+# Load data
+df = pd.read_csv("forex_data.csv")
 
-# Scale data
-scaler = MinMaxScaler()
-scaled_data = scaler.fit_transform(features)
+# Date handling
+if 'Date' in df.columns:
+    df['Date'] = pd.to_datetime(df['Date'])
+else:
+    df['Date'] = pd.date_range(start="2023-01-01", periods=len(df), freq="D")
 
-# Create sequences
-look_back = 60
-X, y = [], []
-for i in range(look_back, len(scaled_data)):
-    X.append(scaled_data[i - look_back:i])
-    y.append(scaled_data[i])
+st.subheader("Data Preview")
+st.dataframe(df.head())
 
-X = np.array(X)
-y = np.array(y)
+# ---------------------------
+# FUTURE PREDICTION (SAFE)
+# ---------------------------
+window = 5
+df['Prediction'] = df['BC'].rolling(window=window).mean()
 
-st.write("Data ready for LSTM")
-st.write("X shape:", X.shape)
-st.write("y shape:", y.shape)
+# ---------------------------
+# KPIs
+# ---------------------------
+current_price = df['BC'].iloc[-1]
+previous_price = df['BC'].iloc[-2]
+trend = "UP 📈" if current_price > previous_price else "DOWN 📉"
 
-# Build LSTM Model
-model = Sequential()
-model.add(LSTM(50, return_sequences=True, input_shape=(X.shape[1], X.shape[2])))
-model.add(LSTM(50))
-model.add(Dense(8))
-model.compile(optimizer='adam', loss='mean_squared_error')
+col1, col2, col3 = st.columns(3)
+col1.metric("Current BC Price", round(current_price, 2))
+col2.metric("Market Trend", trend)
+col3.metric("Predicted Avg", round(df['Prediction'].iloc[-1], 2))
 
-st.write("Training model... please wait a few seconds")
-model.fit(X, y, epochs=5, batch_size=32, verbose=0)
-st.success("Model trained!")
+# ---------------------------
+# PRICE VS PREDICTION CHART
+# ---------------------------
+fig = px.line(
+    df,
+    x="Date",
+    y=["BC", "Prediction"],
+    title="BC Price vs Future Prediction"
+)
+st.plotly_chart(fig, use_container_width=True)
 
-# Predict
-predicted = model.predict(X)
-predicted_prices = scaler.inverse_transform(predicted)
-actual_prices = scaler.inverse_transform(y)
+# ---------------------------
+# BUY / SELL SIGNALS
+# ---------------------------
+df['Signal'] = np.where(df['BC'] > df['Prediction'], 'BUY', 'SELL')
 
-# Plot BC (Bid Close)
-st.write("Prediction vs Actual (BC)")
-fig, ax = plt.subplots(figsize=(10,5))
-ax.plot(actual_prices[:,3], color='blue', label='Actual BC')
-ax.plot(predicted_prices[:,3], color='red', label='Predicted BC')
-ax.set_title('Forex BC Price Prediction')
-ax.set_xlabel('Time')
-ax.set_ylabel('Price')
-ax.legend()
-st.pyplot(fig)
+signal_count = df['Signal'].value_counts().reset_index()
+signal_count.columns = ['Signal', 'Count']
+
+fig2 = px.pie(
+    signal_count,
+    names='Signal',
+    values='Count',
+    title="Buy vs Sell Signals"
+)
+st.plotly_chart(fig2, use_container_width=True)
+
+st.success("Dashboard loaded successfully 🚀")
